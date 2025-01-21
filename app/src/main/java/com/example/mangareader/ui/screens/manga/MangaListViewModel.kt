@@ -14,70 +14,61 @@ import kotlinx.coroutines.launch
 data class MangaListUiState(
     val mangas: List<MangaDto> = emptyList(),
     val isLoading: Boolean = false,
-    val isLoadingMore: Boolean = false,
     val isRefreshing: Boolean = false,
     val error: String? = null,
-    val hasMoreItems: Boolean = true
+    val currentPage: Int = 0,
+    val totalPages: Int = 1
 )
 
 class MangaListViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(MangaListUiState())
     val uiState: StateFlow<MangaListUiState> = _uiState.asStateFlow()
     
-    private var currentPage = 0
     private var currentQuery = ""
     private var searchJob: Job? = null
-    private val pageSize = 20
+    private val pageSize = 18  // Changed to show 3x3 grid
 
     init {
-        loadPopularManga(refresh = true)
+        loadPopularManga()
     }
 
-    private fun loadPopularManga(refresh: Boolean = false) {
-        if (refresh) {
-            currentPage = 0
-            _uiState.update { it.copy(mangas = emptyList()) }
-        }
-        
+    private fun loadPopularManga() {
         viewModelScope.launch {
             try {
-                _uiState.update {
-                    when {
-                        refresh -> it.copy(isRefreshing = true, error = null)
-                        currentPage == 0 -> it.copy(isLoading = true, error = null)
-                        else -> it.copy(isLoadingMore = true, error = null)
-                    }
-                }
-
+                _uiState.update { it.copy(isLoading = true, error = null) }
                 val response = NetworkModule.mangaDexApi.getPopularManga(
-                    offset = currentPage * pageSize,
+                    offset = _uiState.value.currentPage * pageSize,
                     limit = pageSize
                 )
 
+                val totalPages = (response.total + pageSize - 1) / pageSize
+                
                 _uiState.update { state ->
                     state.copy(
-                        mangas = if (refresh || currentPage == 0) {
-                            response.data
-                        } else {
-                            state.mangas + response.data
-                        },
+                        mangas = response.data,
                         isLoading = false,
-                        isLoadingMore = false,
                         isRefreshing = false,
-                        hasMoreItems = response.data.size >= pageSize
+                        totalPages = totalPages
                     )
                 }
-                currentPage++
             } catch (e: Exception) {
                 _uiState.update { 
                     it.copy(
                         error = e.message ?: "Unknown error occurred",
                         isLoading = false,
-                        isLoadingMore = false,
                         isRefreshing = false
                     )
                 }
             }
+        }
+    }
+
+    fun loadPage(page: Int) {
+        _uiState.update { it.copy(currentPage = page) }
+        if (currentQuery.isBlank()) {
+            loadPopularManga()
+        } else {
+            searchManga(currentQuery)
         }
     }
 
@@ -86,7 +77,7 @@ class MangaListViewModel : ViewModel() {
         searchJob?.cancel()
         
         if (query.isBlank()) {
-            loadPopularManga(refresh = true)
+            loadPopularManga()
             return
         }
         
@@ -95,17 +86,19 @@ class MangaListViewModel : ViewModel() {
                 _uiState.update { it.copy(isLoading = true, error = null) }
                 val response = NetworkModule.mangaDexApi.searchManga(
                     title = query,
-                    offset = 0,
+                    offset = _uiState.value.currentPage * pageSize,
                     limit = pageSize
                 )
+
+                val totalPages = (response.total + pageSize - 1) / pageSize
+                
                 _uiState.update { 
                     it.copy(
                         mangas = response.data,
                         isLoading = false,
-                        hasMoreItems = response.data.size >= pageSize
+                        totalPages = totalPages
                     )
                 }
-                currentPage = 1
             } catch (e: Exception) {
                 _uiState.update { 
                     it.copy(
@@ -117,47 +110,10 @@ class MangaListViewModel : ViewModel() {
         }
     }
 
-    fun loadMore() {
-        if (_uiState.value.isLoadingMore || !_uiState.value.hasMoreItems) return
-        
+    fun refresh() {
+        _uiState.update { it.copy(currentPage = 0) }
         if (currentQuery.isBlank()) {
             loadPopularManga()
-        } else {
-            loadMoreSearch()
-        }
-    }
-
-    private fun loadMoreSearch() {
-        viewModelScope.launch {
-            try {
-                _uiState.update { it.copy(isLoadingMore = true, error = null) }
-                val response = NetworkModule.mangaDexApi.searchManga(
-                    title = currentQuery,
-                    offset = currentPage * pageSize,
-                    limit = pageSize
-                )
-                _uiState.update { state ->
-                    state.copy(
-                        mangas = state.mangas + response.data,
-                        isLoadingMore = false,
-                        hasMoreItems = response.data.size >= pageSize
-                    )
-                }
-                currentPage++
-            } catch (e: Exception) {
-                _uiState.update { 
-                    it.copy(
-                        error = e.message ?: "Unknown error occurred",
-                        isLoadingMore = false
-                    )
-                }
-            }
-        }
-    }
-
-    fun refresh() {
-        if (currentQuery.isBlank()) {
-            loadPopularManga(refresh = true)
         } else {
             searchManga(currentQuery)
         }

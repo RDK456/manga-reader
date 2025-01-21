@@ -8,8 +8,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
@@ -48,6 +47,15 @@ fun MangaListScreen(
                     }
                 }
             )
+        },
+        bottomBar = {
+            if (uiState.mangas.isNotEmpty()) {
+                PaginationBar(
+                    currentPage = uiState.currentPage,
+                    totalPages = uiState.totalPages,
+                    onPageSelected = viewModel::loadPage
+                )
+            }
         }
     ) { padding ->
         Box(
@@ -106,9 +114,7 @@ fun MangaListScreen(
                     else -> {
                         MangaGrid(
                             mangas = uiState.mangas,
-                            onMangaClick = onMangaClick,
-                            isLoadingMore = uiState.isLoadingMore,
-                            onLoadMore = viewModel::loadMore
+                            onMangaClick = onMangaClick
                         )
                     }
                 }
@@ -142,16 +148,55 @@ private fun SearchBar(
 }
 
 @Composable
+private fun PaginationBar(
+    currentPage: Int,
+    totalPages: Int,
+    onPageSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        tonalElevation = 3.dp,
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = { onPageSelected(currentPage - 1) },
+                enabled = currentPage > 0
+            ) {
+                Icon(Icons.Default.ArrowBack, "Previous page")
+            }
+            
+            Text(
+                text = "${currentPage + 1} / $totalPages",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            
+            IconButton(
+                onClick = { onPageSelected(currentPage + 1) },
+                enabled = currentPage < totalPages - 1
+            ) {
+                Icon(Icons.Default.ArrowForward, "Next page")
+            }
+        }
+    }
+}
+
+@Composable
 private fun MangaGrid(
     mangas: List<MangaDto>,
     onMangaClick: (String) -> Unit,
-    isLoadingMore: Boolean,
-    onLoadMore: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 140.dp),
-        contentPadding = PaddingValues(16.dp),
+        columns = GridCells.Fixed(3),  // Changed to show 3 columns
+        contentPadding = PaddingValues(8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier
@@ -161,25 +206,6 @@ private fun MangaGrid(
                 manga = manga,
                 onClick = { onMangaClick(manga.id) }
             )
-        }
-
-        if (isLoadingMore) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-        }
-    }
-
-    LaunchedEffect(mangas.size) {
-        if (mangas.isNotEmpty()) {
-            onLoadMore()
         }
     }
 }
